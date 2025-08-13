@@ -20,7 +20,7 @@ services:
       - DATABASE_URL=postgresql://thumb_user:thumb_pass@postgres:5432/thumbworx
       - REDIS_URL=redis://redis:6379/0
       - TRACCAR_BASE_URL=https://demo.traccar.org
-      - TRACCAR_USER=demo_user
+      - TRACCAR_USER=hansqueja8@gmail.com
       - TRACCAR_PASS=demo_pass
     depends_on: ["postgres","redis"]
  
@@ -33,7 +33,7 @@ services:
       - DB_USERNAME=thumb_user
       - DB_PASSWORD=thumb_pass
       - TRACCAR_BASE_URL=https://demo.traccar.org
-      - TRACCAR_USER=demo_user
+      - TRACCAR_USER=hansqueja8@gmail.com
       - TRACCAR_PASS=demo_pass
     depends_on: ["postgres"]
  
