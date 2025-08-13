@@ -4,6 +4,7 @@ import requests
 import redis
 from sqlalchemy import create_engine, MetaData, Table, Column, Integer, Float, String, DateTime
 from datetime import datetime
+from apscheduler.schedulers.background import BackgroundScheduler
  
 TRACCAR_BASE = os.getenv("TRACCAR_BASE_URL")
 TRACCAR_USER = os.getenv("TRACCAR_USER")
@@ -31,16 +32,10 @@ app = Flask(__name__)
  
 def traccar_auth():
 	return (TRACCAR_USER, TRACCAR_PASS)
- 
-@app.route("/api/traccar/devices")
-def devices():
-	res = requests.get(f"{TRACCAR_BASE}/api/devices", auth=traccar_auth())
-	return jsonify(res.json())
- 
-@app.route("/api/traccar/positions")
-def positions_api():
+
+def fetch_and_store_positions_api():
     # Query traccar positions
-    res = requests.get(f"{TRACCAR_BASE}/api/positions", auth=traccar_auth(), params=request.args)
+    res = requests.get(f"{TRACCAR_BASE}/api/positions", auth=traccar_auth())
     items = res.json()
 
     r.set("latest_positions", json.dumps(items), ex=30)
@@ -56,6 +51,16 @@ def positions_api():
                 attributes=json.dumps(p.get("attributes", {}))
             ))
 
+    return items
+
+@app.route("/api/traccar/devices")
+def devices():
+	res = requests.get(f"{TRACCAR_BASE}/api/devices", auth=traccar_auth())
+	return jsonify(res.json())
+
+@app.route("/api/traccar/positions")
+def positions_api():
+    items = fetch_and_store_positions_api()
     return jsonify(items)
 
 @app.route("/api/positions_cached")
@@ -77,6 +82,14 @@ def predict_eta():
     km = geodesic(a, b).km
     eta_minutes = km * 3
     return jsonify({"eta_minutes": round(eta_minutes,2)})
+
+def start_scheduler():
+    sched = BackgroundScheduler()
+    sched.add_job(fetch_and_store_positions_api, 'interval', seconds=10)
+    sched.start()
+
+# Start the scheduler when Flask starts
+start_scheduler()
  
 if __name__ == "__main__":
 	app.run(host="0.0.0.0", port=5000, debug=True)
