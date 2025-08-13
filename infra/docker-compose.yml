@@ -41,7 +41,17 @@ services:
     build: ../frontend-next
     ports: ["3000:3000"]
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_URL=http://laravel:8000
+    develop:
+      watch:
+        - action: sync
+          path: ./frontend
+          target: /app
+          ignore:
+            - node_modules/
+            - .next/
+        - action: rebuild
+          path: frontend/package.json
 
 volumes:
   pgdata:
