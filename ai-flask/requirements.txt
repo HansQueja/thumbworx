@@ -7,3 +7,4 @@ gunicorn
 python-dotenv
 geopy
 joblib
+APScheduler==3.10.4
