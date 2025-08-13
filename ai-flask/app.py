@@ -1,4 +1,5 @@
-import os, json, time
+import os, json
+from dateutil import parser
 from flask import Flask, jsonify, request
 import requests
 import redis
@@ -42,12 +43,25 @@ def fetch_and_store_positions_api():
     # persist latest N positions (optional)
     with engine.begin() as conn:
         for p in items:
+            ts = None
+            timestamp_value = p.get("deviceTime")
+            if timestamp_value:
+                try:
+                    if isinstance(timestamp_value, (int, float)):
+                        ts = datetime.fromtimestamp(timestamp_value / 1000.0)
+                    else:
+                        ts = parser.isoparse(timestamp_value)
+                except Exception:
+                    ts = datetime.now()
+            else:
+                ts = datetime.now()
+
             conn.execute(positions.insert().values(
                 device_id=p.get("deviceId"),
                 latitude=p.get("latitude"),
                 longitude=p.get("longitude"),
                 speed=p.get("speed"),
-                timestamp=datetime.fromtimestamp(p.get("deviceTime")/1000.0) if p.get("deviceTime") else datetime.utcnow(),
+                timestamp=ts,
                 attributes=json.dumps(p.get("attributes", {}))
             ))
 
