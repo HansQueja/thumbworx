@@ -36,9 +36,7 @@ return [
     ],
 
     'traccar' => [
-        'base_url' => env('TRACCAR_BASE_URL'),
-        'user'     => env('TRACCAR_USER'),
-        'pass'     => env('TRACCAR_PASS'),
+        'flask_api' => env('FLASK_API'),
     ],
 
 ];
