@@ -1,9 +1,7 @@
 import os, json
-from dateutil import parser
 from flask import Flask, jsonify, request
 import requests
 import redis
-from sqlalchemy import create_engine, MetaData, Table, Column, Integer, Float, String, DateTime
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
  
@@ -11,61 +9,36 @@ TRACCAR_BASE = os.getenv("TRACCAR_BASE_URL")
 TRACCAR_USER = os.getenv("TRACCAR_USER")
 TRACCAR_PASS = os.getenv("TRACCAR_PASS")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-DB_URL = os.getenv("DATABASE_URL", "postgresql://thumb_user:thumb_pass@localhost/thumbworx")
  
 r = redis.from_url(REDIS_URL)
-engine = create_engine(DB_URL)
-metadata = MetaData()
- 
-positions = Table('positions', metadata,
-    Column('id', Integer, primary_key=True),
-    Column('device_id', Integer),
-    Column('latitude', Float),
-    Column('longitude', Float),
-    Column('speed', Float),
-    Column('timestamp', DateTime),
-    Column('attributes', String),
-)
- 
-metadata.create_all(engine)
  
 app = Flask(__name__)
  
 def traccar_auth():
 	return (TRACCAR_USER, TRACCAR_PASS)
 
-def fetch_and_store_positions_api():
-    # Query traccar positions
-    res = requests.get(f"{TRACCAR_BASE}/api/positions", auth=traccar_auth())
-    items = res.json()
+def fetch_positions_api():
+    try:
+        res = requests.get(f"{TRACCAR_BASE}/api/positions", auth=traccar_auth(), timeout=10)
+        res.raise_for_status()
+        items = res.json()
 
-    r.set("latest_positions", json.dumps(items), ex=30)
-    # persist latest N positions (optional)
-    with engine.begin() as conn:
-        for p in items:
-            ts = None
-            timestamp_value = p.get("deviceTime")
-            if timestamp_value:
-                try:
-                    if isinstance(timestamp_value, (int, float)):
-                        ts = datetime.fromtimestamp(timestamp_value / 1000.0)
-                    else:
-                        ts = parser.isoparse(timestamp_value)
-                except Exception:
-                    ts = datetime.now()
-            else:
-                ts = datetime.now()
+        filtered_items = []
+        for item in items:
+            new_dict = {}
+            new_dict["device_id"] = item["deviceId"]
+            new_dict["latitude"] = item["latitude"]
+            new_dict["longitude"] = item["longitude"]
+            new_dict["speed"] = item["speed"]
+            new_dict["device_time"] = item["deviceTime"]
+            new_dict["attributes"] = item["attributes"]
+            filtered_items.append(new_dict)
 
-            conn.execute(positions.insert().values(
-                device_id=p.get("deviceId"),
-                latitude=p.get("latitude"),
-                longitude=p.get("longitude"),
-                speed=p.get("speed"),
-                timestamp=ts,
-                attributes=json.dumps(p.get("attributes", {}))
-            ))
-
-    return items
+        r.set("latest_positions", json.dumps(filtered_items), ex=20)
+        return filtered_items
+    except requests.RequestException as e:
+        print(f"Error fetching Traccar: {e}")
+        return cached_positions()
 
 @app.route("/api/traccar/devices")
 def devices():
@@ -74,7 +47,7 @@ def devices():
 
 @app.route("/api/traccar/positions")
 def positions_api():
-    items = fetch_and_store_positions_api()
+    items = fetch_positions_api()
     return jsonify(items)
 
 @app.route("/api/positions_cached")
@@ -99,11 +72,10 @@ def predict_eta():
 
 def start_scheduler():
     sched = BackgroundScheduler()
-    sched.add_job(fetch_and_store_positions_api, 'interval', seconds=10)
+    sched.add_job(fetch_positions_api, 'interval', seconds=20)
     sched.start()
 
-# Start the scheduler when Flask starts
 start_scheduler()
- 
+
 if __name__ == "__main__":
-	app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)
